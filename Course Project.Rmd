@@ -1,0 +1,156 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Petar Luketic"
+date: "Saturday, October 24, 2015"
+output: pdf_document
+---
+
+
+
+
+
+### Executive Summary
+
+In this project, we use data from accelerometers on the belt, forearm, arm, and dumbell to predict the manner in which six participants did the barbell lifts. They were asked to perform exercise correctly and incorrectly in 5 different ways. 
+
+After extensive training data analysis and modeling trials, random forest algorythm proved to be the most accurate algorithm for predicting the way in which an exercise has been conducted. In sample and out of sample (20 cases) accuracy is 100%, consequently expected out of sample error is near zero.  
+
+
+
+
+
+
+### Loading the Data
+
+```{r}
+trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+train <- read.csv(url(trainUrl),head=TRUE,sep=",", na.strings=c("NA","#DIV/0!",""))
+test <- read.csv(url(testUrl),head=TRUE,sep=",", na.strings=c("NA","#DIV/0!",""))
+
+library(caret)
+library(randomForest)
+
+```
+
+
+
+
+
+
+### Data cleansing
+
+Identify variables that are predominantly empty (NA)
+```{r, echo=TRUE}
+naprops <- colSums(is.na(train))/nrow(train)
+mostlyNAs <- names(naprops[naprops > 0.75]) 
+mostlyNACols <- which(naprops > 0.75) 
+train2 <- train[,-mostlyNACols]
+```
+
+Exclude variables whoose variance is near zero
+```{r, echo=TRUE}
+nzv <- nearZeroVar(train2)
+train3 <- train2[,-nzv]
+```
+
+Create partitions for training and testing purpose.
+```{r, echo=TRUE}
+inTrain = createDataPartition(train3$classe, p = 0.75)[[1]]
+train_in_sample = train3[inTrain, ]
+test_in_sample = train3[-inTrain, ]
+```
+
+Exclude row number, user_name and cvtd_timestamp columnS  
+```{r, echo=TRUE}
+train_in_sample <- train_in_sample[,-grep("X|user_name|cvtd_timestamp",names(train_in_sample))]
+test_in_sample <- test_in_sample[,-grep("X|user_name|cvtd_timestamp",names(test_in_sample))]
+```
+
+Final structure of training data set for predictive model creation
+```{r, echo=TRUE}
+modelVars <- names(train_in_sample)
+modelVars1 <- modelVars[-grep("classe",modelVars)]
+
+cleanedTrainData <- train[,modelVars]
+```
+
+
+
+
+
+### Random forest model creation
+
+First, we build random forest model with up to 100 trees to grow.
+```{r, echo=TRUE}
+rfFit <- randomForest(classe ~., data=cleanedTrainData, type="class", ntree = 100)
+```
+
+By ploting the model, one can observe that above 80 trees MSE becomes insignificant so we confirm provided ntree argument.
+```{r, echo=TRUE}
+plot(rfFit, log="y",main="MSE of the random forest model created")
+```
+
+Variable importance plot highlights relative predicor's importances.
+```{r, echo=TRUE}
+varImpPlot(rfFit)
+```
+
+
+
+
+
+### Model performance on the in sample training data
+
+Get the values predicted by the model
+```{r, echo=TRUE}
+RFpredTrain <- predict(rfFit,newdata=train_in_sample)
+```
+
+Confusion matrix of the model performance on the in sample training data demonstrates perfect model performance.
+```{r, echo=TRUE}
+confusionMatrix(RFpredTrain,train_in_sample$classe)$table
+```
+
+
+
+
+
+### Model performance on the in sample test data
+
+Exclude classe column from the test data in sample, and apply random forest model rfFit onto the test in sample data
+```{r, echo=TRUE}
+classe_col <- grep("classe",names(test_in_sample))
+RFpred_in_sample <- predict(rfFit, newdata = test_in_sample[,-classe_col], type="class")
+```
+
+Use a confusion matrix to get the in sample test error
+```{r, echo=TRUE}
+confusionMatrix(RFpred_in_sample,test_in_sample$classe)
+```
+
+
+
+
+
+### Model predictions on out of sample data and expected error
+
+```{r, echo=TRUE}
+RFpred_out_sample <- predict(rfFit, newdata = test, type="class")
+RFpred_out_sample
+```
+
+Considering perfect match on the training and on the testing data indicates that we have a perfect model which would perform in the same manner on out of sample cases. Nevertheless, some error still should be expected on the out of sample data.
+
+
+
+
+
+
+
+### References
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#wle_paper_section#ixzz3pc5SknLR
